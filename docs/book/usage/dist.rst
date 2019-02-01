@@ -98,7 +98,9 @@ Following are all RESTful resources. Also make sure to check out the
 +-----------------------------------+---------------------------------------------------------------+
 | ``DELETE`` :ref:`task_delete`     | Delete all associated information of a task.                  |
 +-----------------------------------+---------------------------------------------------------------+
-| ``GET`` :ref:`report_get`         + Fetch an analysis report.                                     |
+| ``GET`` :ref:`report_get`         | Fetch an analysis report.                                     |
++-----------------------------------+---------------------------------------------------------------+
+| ``GET`` :ref:`pcap_get`           | Fetches the PCAP of an analysis.                              |
 +-----------------------------------+---------------------------------------------------------------+
 
 .. _node_root_get:
@@ -317,6 +319,16 @@ Fetch a report for the given task in the specified format::
     $ curl http://localhost:9003/api/report/2
     ...
 
+.. _pcap_get:
+
+GET /api/pcap/<id>
+------------------
+
+Fetches the PCAP for the given task::
+
+   $ curl http://localhost:9003/api/pcap/2
+   ...
+
 Proposed setup
 ==============
 
@@ -445,9 +457,21 @@ SaltStack configuration and some manual SQL commands (and preferably the
 Distributed Cuckoo Worker is temporary disabled, i.e.,
 ``supervisorctl stop distributed``)::
 
-    $ psql -c "UPDATE SET status = 'pending' WHERE status = 'processing' AND node_id = 123"
+    $ psql -c "UPDATE task SET status = 'pending' WHERE status = 'processing' AND node_id = 123"
     $ salt cuckoo1 state.apply cuckoo.clean
     $ salt cuckoo1 state.apply cuckoo.start
+
+If the entire Cuckoo cluster was somehow locked up, i.e., all tasks have been
+'assigned', are 'processing', or have the 'finished' status while none of the
+Cuckoo nodes are currently working on said analyses (e.g., due to numerous
+resets etc), then the following steps may be used to reset the entire state::
+
+    $ supervisorctl -c ~/.cuckoo/supervisord.conf stop distributed
+    $ salt '*' state.apply cuckoo.stop
+    $ salt '*' state.apply cuckoo.clean
+    $ psql -c "UPDATE task SET status = 'pending', node_id = null WHERE status IN ('assigned', 'processing', 'finished')"
+    $ salt '*' state.apply cuckoo.start
+    $ supervisorctl -c ~/.cuckoo/supervisord.conf start distributed
 
 If a Cuckoo node has a number of tasks that failed to process, therefore
 locking up the Cuckoo node altogether, then upgrading the Cuckoo instances
